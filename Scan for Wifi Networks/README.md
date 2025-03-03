@@ -8,6 +8,7 @@
 | Display Results | Prints SSID, BSSID, Signal Strength, Encryption Type |
 | Wait 5 Seconds | Pauses before scanning again |
 | Check for STOP Command | If the user types "STOP", scanning stops |
+| Check for START Command | If the user types "STARt", scanning starts |
 
 ## What the Output Means
 
@@ -27,3 +28,10 @@
 
 - It cannot detect WPA3 encryption devices
 - It cannot detect 5GHz frequency devices
+- To do this we would need an wifi adapter
+
+## Hidden network (SSID) detection Limitations
+
+- Sometimes when trying to detect hidden networks or networks without SSID this code might not work as some routers will not send the beacon frame when SSID is not being sent. 
+- To detect this we would need to use another program that will capture the probe request and reveal the hidden identity.
+- Use the scan_probes2detect_hidden_nw code for this exercise.
