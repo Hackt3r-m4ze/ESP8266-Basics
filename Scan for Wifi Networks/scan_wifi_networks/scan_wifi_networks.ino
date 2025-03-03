@@ -26,7 +26,12 @@ void loop() {
 
         for (int i = 0; i < numNetworks; i++) {
             Serial.print("SSID: ");
-            Serial.print(WiFi.SSID(i));
+            // To check for hidden networks as well
+            if (WiFi.SSID(i) == "") {
+                Serial.print("[HIDDEN]");
+            } else {
+                Serial.print(WiFi.SSID(i));
+            }
 
             Serial.print(" | BSSID: ");
             Serial.print(WiFi.BSSIDstr(i));
