@@ -23,4 +23,7 @@
     - WPA/WPA2 = Secure networks.
     - WEP = Very weak encryption (can be cracked easily).
 
+## Limitations of scanning with EPS8622
 
+- It cannot detect WPA3 encryption devices
+- It cannot detect 5GHz frequency devices
