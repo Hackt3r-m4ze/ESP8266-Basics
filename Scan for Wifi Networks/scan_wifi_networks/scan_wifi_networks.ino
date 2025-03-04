@@ -1,63 +1,74 @@
 #include <ESP8266WiFi.h>
 
-bool sniffingActive = false;  // Start with sniffing OFF
-
-void wifiSniffer(uint8_t *buf, uint16_t len) {
-    if (!sniffingActive) return;  // Ignore packets if sniffing is disabled
-    if (len < 36) return;  // Ignore small packets
-
-    int ssid_length = buf[25];  // Extract SSID length from packet
-
-    // Validate SSID length (must be between 1 and 32 characters)
-    if (ssid_length > 0 && ssid_length < 32 && len >= (26 + ssid_length)) {
-        String ssid = "";
-        for (int i = 26; i < (26 + ssid_length); i++) {
-            if (isprint(buf[i])) {  // Only allow readable characters
-                ssid += (char)buf[i];
-            }
-        }
-
-        // Only print SSID if it's valid (not empty)
-        if (ssid.length() > 0 && ssid != "[HIDDEN]") {
-            Serial.print("📡 Hidden SSID Revealed: ");
-            Serial.println(ssid);
-        }
-    }
-}
+bool scanActive = true;  // Flag to control scanning
 
 void setup() {
     Serial.begin(115200);
     WiFi.mode(WIFI_STA);
-    wifi_set_opmode(STATION_MODE);
-    wifi_promiscuous_enable(0);  // Start with sniffing disabled
-    wifi_set_promiscuous_rx_cb(NULL);  // Unregister callback initially
-
-    // **Proper startup message**
-    Serial.println("==========================================");
-    Serial.println("Type 'START' to begin sniffing hidden SSIDs.");
-    Serial.println("Type 'STOP' to stop sniffing.");
-    Serial.println("==========================================");
+    WiFi.disconnect();
+    delay(100);
 }
 
 void loop() {
-    // Check for user input to START or STOP sniffing
+    // Check for user input to START or STOP scanning
     if (Serial.available() > 0) {
         String input = Serial.readString();
         input.trim();
 
-        if (input.equalsIgnoreCase("STOP") && sniffingActive) {
-            Serial.println("Sniffing stopped. Type 'START' to resume.");
-            wifi_promiscuous_enable(0);  // Disable sniffing
-            wifi_set_promiscuous_rx_cb(NULL);  // Unregister callback
-            sniffingActive = false;
-        } 
-        else if (input.equalsIgnoreCase("START") && !sniffingActive) {
-            Serial.println("Sniffing started... Looking for hidden SSIDs.");
-            wifi_promiscuous_enable(1);  // Enable sniffing
-            wifi_set_promiscuous_rx_cb(wifiSniffer);  // Register callback again
-            sniffingActive = true;
+        if (input.equalsIgnoreCase("STOP")) {
+            Serial.println("Scanning stopped. Type 'START' to resume.");
+            scanActive = false;  // Disable scanning
+        } else if (input.equalsIgnoreCase("START")) {
+            Serial.println("Resuming scan...");
+            scanActive = true;  // Enable scanning
         }
     }
 
-    delay(500);  // Avoid excessive CPU usage
+    // Perform Wi-Fi scanning only if scanning is active
+    if (scanActive) {
+        Serial.println("Scanning for Wi-Fi networks...");
+        int numNetworks = WiFi.scanNetworks();
+
+        if (numNetworks == 0) {
+            Serial.println("No Wi-Fi networks found.");
+        } else {
+            Serial.println("Networks found:");
+            Serial.println("-----------------------------");
+
+            for (int i = 0; i < numNetworks; i++) {
+                Serial.print("SSID: ");
+
+                // If SSID is empty, it's a hidden network
+                if (WiFi.SSID(i).length() == 0) {
+                    Serial.print("[HIDDEN]");
+                } else {
+                    Serial.print(WiFi.SSID(i));
+                }
+
+                Serial.print(" | BSSID: ");
+                Serial.print(WiFi.BSSIDstr(i));  // Always available
+
+                Serial.print(" | Signal Strength: ");
+                Serial.print(WiFi.RSSI(i));  // Always available
+                Serial.print(" dBm");
+
+                Serial.print(" | Encryption: ");
+                switch (WiFi.encryptionType(i)) {
+                    case ENC_TYPE_WEP: Serial.println(" WEP"); break;
+                    case ENC_TYPE_TKIP: Serial.println(" WPA/WPA2 (TKIP)"); break;
+                    case ENC_TYPE_CCMP: Serial.println(" WPA2 (AES)"); break;
+                    case ENC_TYPE_AUTO: Serial.println(" WPA/WPA2 (Auto)"); break;
+                    case ENC_TYPE_NONE: Serial.println(" Open (No Password)"); break;
+                    default: Serial.println(" Unknown");
+                }
+            }
+        }
+
+        Serial.println("-----------------------------");
+        Serial.println("Scan complete. Waiting 5 seconds before next scan... Type 'STOP' to pause.");
+
+        delay(5000);
+    } else {
+        delay(500);  // Short delay to avoid CPU overload when scanning is off
+    }
 }
