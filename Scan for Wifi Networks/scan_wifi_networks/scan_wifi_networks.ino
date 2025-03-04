@@ -1,68 +1,63 @@
 #include <ESP8266WiFi.h>
 
-bool stopScan = false;  // Flag to stop scanning
+bool sniffingActive = false;  // Start with sniffing OFF
+
+void wifiSniffer(uint8_t *buf, uint16_t len) {
+    if (!sniffingActive) return;  // Ignore packets if sniffing is disabled
+    if (len < 36) return;  // Ignore small packets
+
+    int ssid_length = buf[25];  // Extract SSID length from packet
+
+    // Validate SSID length (must be between 1 and 32 characters)
+    if (ssid_length > 0 && ssid_length < 32 && len >= (26 + ssid_length)) {
+        String ssid = "";
+        for (int i = 26; i < (26 + ssid_length); i++) {
+            if (isprint(buf[i])) {  // Only allow readable characters
+                ssid += (char)buf[i];
+            }
+        }
+
+        // Only print SSID if it's valid (not empty)
+        if (ssid.length() > 0 && ssid != "[HIDDEN]") {
+            Serial.print("📡 Hidden SSID Revealed: ");
+            Serial.println(ssid);
+        }
+    }
+}
 
 void setup() {
     Serial.begin(115200);
     WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
-    delay(100);
+    wifi_set_opmode(STATION_MODE);
+    wifi_promiscuous_enable(0);  // Start with sniffing disabled
+    wifi_set_promiscuous_rx_cb(NULL);  // Unregister callback initially
+
+    // **Proper startup message**
+    Serial.println("==========================================");
+    Serial.println("Type 'START' to begin sniffing hidden SSIDs.");
+    Serial.println("Type 'STOP' to stop sniffing.");
+    Serial.println("==========================================");
 }
 
 void loop() {
-    if (stopScan) {
-        Serial.println("Scanning stopped by user.");
-        while (true) yield();  // Prevents watchdog reset
-    }
-
-    Serial.println("Scanning for Wi-Fi networks...");
-    int numNetworks = WiFi.scanNetworks();
-
-    if (numNetworks == 0) {
-        Serial.println("No Wi-Fi networks found.");
-    } else {
-        Serial.println("Networks found:");
-        Serial.println("-----------------------------");
-
-        for (int i = 0; i < numNetworks; i++) {
-            Serial.print("SSID: ");
-            // To check for hidden networks as well
-            if (WiFi.SSID(i) == "") {
-                Serial.print("[HIDDEN]");
-            } else {
-                Serial.print(WiFi.SSID(i));
-            }
-
-            Serial.print(" | BSSID: ");
-            Serial.print(WiFi.BSSIDstr(i));
-
-            Serial.print(" | Signal Strength: ");
-            Serial.print(WiFi.RSSI(i));
-            Serial.print(" dBm");
-
-            Serial.print(" | Encryption: ");
-            switch (WiFi.encryptionType(i)) {
-                case ENC_TYPE_WEP: Serial.println(" WEP"); break;
-                case ENC_TYPE_TKIP: Serial.println(" WPA/WPA2 (TKIP)"); break;
-                case ENC_TYPE_CCMP: Serial.println(" WPA2 (AES)"); break;
-                case ENC_TYPE_AUTO: Serial.println(" WPA/WPA2 (Auto)"); break;
-                case ENC_TYPE_NONE: Serial.println(" Open (No Password)"); break;
-                default: Serial.println(" Unknown");
-            }
-        }
-    }
-
-    Serial.println("-----------------------------");
-    Serial.println("Scan complete. Waiting 5 seconds before next scan... Type 'STOP' to end scanning.");
-
-    delay(5000);
-
-    // Check for user input to stop scanning
+    // Check for user input to START or STOP sniffing
     if (Serial.available() > 0) {
         String input = Serial.readString();
         input.trim();
-        if (input.equalsIgnoreCase("STOP")) {
-            stopScan = true;
+
+        if (input.equalsIgnoreCase("STOP") && sniffingActive) {
+            Serial.println("Sniffing stopped. Type 'START' to resume.");
+            wifi_promiscuous_enable(0);  // Disable sniffing
+            wifi_set_promiscuous_rx_cb(NULL);  // Unregister callback
+            sniffingActive = false;
+        } 
+        else if (input.equalsIgnoreCase("START") && !sniffingActive) {
+            Serial.println("Sniffing started... Looking for hidden SSIDs.");
+            wifi_promiscuous_enable(1);  // Enable sniffing
+            wifi_set_promiscuous_rx_cb(wifiSniffer);  // Register callback again
+            sniffingActive = true;
         }
     }
+
+    delay(500);  // Avoid excessive CPU usage
 }
